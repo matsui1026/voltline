@@ -1,2 +1,47 @@
-# voltline
-VOLTLINE - near-future hover racing browser game with tilt steering and P2P multiplayer
+# VOLTLINE
+
+近未来ネオン都市を舞台にしたホバーレーシングゲーム。スマホを横持ちにしてハンドルのように傾けて操作します。ビルド不要の静的サイト（Three.js + Web Audio + WebRTC）。
+
+## 遊び方
+
+- **ステアリング**: スマホを左右に傾ける（設定でタッチ操作に変更可）。PC は ←→ / A・D
+- **アクセル**: 既定はオート。PC は ↑ / W、ブレーキは ↓ / S
+- **ドリフト**: 曲がりながら DRIFT を長押し（PC は Space）。溜めるほど 3 段階でブーストが強くなり、離すと発動
+- **アイテム**: ITEM ボタン（PC は Shift / E）
+- **ロケットスタート**: カウントダウンの GO 直前に DRIFT かアクセルを押す
+- **スリップストリーム**: 前の機体の真後ろに付くと加速
+
+| アイテム | 効果 |
+| --- | --- |
+| SURGE | 短いブースト |
+| OVERDRIVE | 長いブースト（下位ほど出やすい） |
+| BOLT | 前方の機体を追尾する弾 |
+| TRAP | 後方に設置する地雷 |
+| AEGIS | 攻撃を 1 回防ぐシールド |
+| STORM | 自分より前の全員を減速（下位限定） |
+
+## 通信対戦
+
+1. 1 人が **HOST ROOM** を押し、表示された 4 文字のルームコードを共有
+2. 他のプレイヤーは **JOIN ROOM** でコードを入力（最大 4 人、空き枠は AI）
+3. ホストが START
+
+サーバー不要の P2P（PeerJS の公開シグナリングサーバー + WebRTC）です。モバイル回線など一部のネットワークでは接続できない場合があります（TURN サーバーは `js/net.js` のコメント箇所に追加できます）。
+
+## ローカルで動かす
+
+```bash
+python -m http.server 8123
+```
+
+`http://localhost:8123` を開きます。スマホの傾きセンサーは HTTPS が必須なので、実機では GitHub Pages などの HTTPS ホスティングで開いてください。
+
+## 構成
+
+- `js/track.js` コース定義とスプライン
+- `js/sim.js` 物理・ドリフト・アイテム・AI・同期
+- `js/render.js` Three.js 描画
+- `js/input.js` 傾き / タッチ / キーボード
+- `js/audio.js` 効果音と BGM（すべて Web Audio で合成）
+- `js/net.js` P2P 通信
+- `js/ui.js`, `css/style.css` メニューと HUD
