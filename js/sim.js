@@ -49,7 +49,7 @@ export function createRace(track, roster, authority, hooks) {
       ai: r.kind === 'ai',
       x: g.x, z: g.z, h: g.h, speed: 0, steer: 0,
       idx: g.i, lat: 0, lastS: 0, dist: 0, lap: 0, pos: slot + 1,
-      drifting: false, driftDir: 0, charge: 0, tier: 0, driftLock: false, hop: 0,
+      drifting: false, driftDir: 0, driftAmt: 0, charge: 0, tier: 0, driftLock: false, hop: 0,
       boostT: 0, spinT: 0, spin: 0, inv: 0, shield: 0, stormT: 0,
       item: null, rollT: 0, slipAcc: 0, slip: false, offroad: false, wrongWay: false,
       padCd: 0, wallCd: 0, bumpCd: 0, launchAt: -1,
@@ -191,7 +191,7 @@ export function createRace(track, roster, authority, hooks) {
     const sp01 = k.speed / C.MAX;
     if (!inp.drift) k.driftLock = false;
     if (!k.drifting) {
-      if (inp.drift && !k.driftLock && Math.abs(k.steer) > 0.22 && sp01 > 0.45 && k.spinT <= 0) {
+      if (inp.drift && !k.driftLock && Math.abs(k.steer) > 0.3 && sp01 > 0.45 && k.spinT <= 0) {
         k.drifting = true; k.driftDir = Math.sign(k.steer); k.charge = 0; k.tier = 0; k.hop = 1;
         sfx('drift_start', k);
       }
@@ -205,18 +205,19 @@ export function createRace(track, roster, authority, hooks) {
       if (t > k.tier) { k.tier = t; sfx('drift_tier' + t, k); }
     }
 
-    // turning
-    let turn;
-    if (k.drifting) turn = (k.driftDir * 0.85 + k.steer * 0.6) * C.TURN * 1.12;
-    else turn = k.steer * C.TURN * k.turnMul * (1 - 0.35 * clamp(sp01, 0, 1));
+    // turning: blend from grip steering into the drift arc over ~0.4s (and back out smoothly)
+    k.driftAmt += ((k.drifting ? 1 : 0) - k.driftAmt) * Math.min(1, dt * (k.drifting ? 4.5 : 7));
+    const grip = k.steer * C.TURN * k.turnMul * (1 - 0.35 * clamp(sp01, 0, 1));
+    const arc = (k.driftDir * 0.6 + k.steer * 0.4) * C.TURN * 1.1;   // inner steer = tight, counter-steer = wide
+    let turn = grip + (arc - grip) * k.driftAmt;
     turn *= clamp(k.speed / 12, -1, 1);
     k.h = wrapAngle(k.h - turn * dt);
 
     // move (+ outward slide while drifting)
     const sh = Math.sin(k.h), ch = Math.cos(k.h);
     k.x += sh * k.speed * dt; k.z += ch * k.speed * dt;
-    if (k.drifting) {
-      const sl = k.driftDir * k.speed * 0.13 * dt;
+    if (k.driftAmt > 0.01) {
+      const sl = k.driftDir * k.speed * 0.1 * k.driftAmt * dt;
       k.x += ch * sl; k.z += -sh * sl;
     }
 
@@ -295,9 +296,10 @@ export function createRace(track, roster, authority, hooks) {
     k.slip = slip;
 
     // visuals
-    const yawT = k.drifting ? -k.driftDir * 0.42 : -k.steer * 0.1;
-    k.yawVis += (yawT - k.yawVis) * Math.min(1, dt * 9);
-    k.lean += ((k.drifting ? k.driftDir * 0.3 : k.steer * 0.22) * clamp(sp01, 0, 1) - k.lean) * Math.min(1, dt * 8);
+    const da = k.driftAmt;
+    const yawT = -k.driftDir * 0.38 * da - k.steer * 0.1 * (1 - da);
+    k.yawVis += (yawT - k.yawVis) * Math.min(1, dt * 7);
+    k.lean += ((k.driftDir * 0.28 * da + k.steer * 0.22 * (1 - da)) * clamp(sp01, 0, 1) - k.lean) * Math.min(1, dt * 7);
   }
 
   function stepRemote(k, dt) {
@@ -309,8 +311,8 @@ export function createRace(track, roster, authority, hooks) {
     k.h = wrapAngle(k.h + wrapAngle(n.h - k.h) * a);
     k.speed = n.sp; k.dist += n.sp * dt;
     if (k.spinT > 0) k.spin += dt * 15; else k.spin = 0;
-    const yawT = k.drifting ? -k.driftDir * 0.42 : 0;
-    k.yawVis += (yawT - k.yawVis) * Math.min(1, dt * 9);
+    const yawT = k.drifting ? -k.driftDir * 0.38 : 0;
+    k.yawVis += (yawT - k.yawVis) * Math.min(1, dt * 5);
     k.lean += ((k.drifting ? k.driftDir * 0.3 : 0) - k.lean) * Math.min(1, dt * 8);
     track.locate(k.x, k.z, k.idx, loc);
     k.idx = loc.i; k.lat = loc.lat; k.lastS = loc.s;

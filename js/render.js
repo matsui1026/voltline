@@ -451,7 +451,7 @@ export async function createRenderer(canvas, quality) {
     const sx = (Math.random() - 0.5) * camShake, sy = (Math.random() - 0.5) * camShake;
     camera.position.set(camPos.x + sx, camPos.y + sy + (boosting ? Math.random() * 0.05 : 0), camPos.z);
     camera.lookAt(camLook);
-    camera.rotateZ(-k.steer * 0.045 * sp01 - (k.drifting ? k.driftDir * 0.05 : 0));
+    camera.rotateZ(-k.steer * 0.045 * sp01 - (k.driftAmt || 0) * k.driftDir * 0.05);
     const fovT = 68 + sp01 * 10 + (boosting ? 16 : 0);
     fov += (fovT - fov) * Math.min(1, dt * (fovT > fov ? 6 : 2));
     if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = fov; camera.updateProjectionMatrix(); }
