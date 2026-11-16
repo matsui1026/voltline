@@ -2,8 +2,8 @@
 import { wrapAngle } from './track.js';
 
 export const C = {
-  MAX: 62, ACC: 34, BRAKE: 70, TURN: 1.9, KMH: 5,
-  TIER: [0.7, 1.7, 3.0], TIER_BOOST: [0, 0.7, 1.3, 2.2],
+  MAX: 46, ACC: 26, BRAKE: 55, TURN: 1.75, KMH: 6,
+  TIER: [0.6, 1.4, 2.4], TIER_BOOST: [0, 0.7, 1.3, 2.2],
   RADIUS: 1.5,
 };
 export const COLORS = ['#22e6ff', '#ff2bd6', '#ffc531', '#7cff4f', '#ff6a3d', '#a78bfa'];
@@ -128,7 +128,9 @@ export function createRace(track, roster, authority, hooks) {
     let c = 0;
     const far = 10 + ((Math.max(0, k.speed) * 0.55) | 0);
     for (let q = 2; q < far; q += 2) c = Math.max(c, Math.abs(tr.curv[(k.idx + q) % n]));
-    const vmax = (1.75 * k.turnMul) / (c + 0.0107 * k.turnMul);
+    // fastest speed at which the craft can still follow the upcoming curvature with grip steering
+    const T = C.TURN * k.turnMul * 0.85;
+    const vmax = T / (c + T * 0.3 / C.MAX);
     // rubber band against the best human
     let lead = -1e9;
     for (const o of race.karts) if (!o.ai && !o.gone) lead = Math.max(lead, o.dist);
@@ -161,7 +163,7 @@ export function createRace(track, roster, authority, hooks) {
       inp = NO_INPUT;
       if (k.spinT <= 0) k.spin = 0;
     }
-    k.steer += (clamp(inp.steer, -1, 1) - k.steer) * Math.min(1, dt * 11);
+    k.steer += (clamp(inp.steer, -1, 1) - k.steer) * Math.min(1, dt * 8);
 
     // item roulette
     if (k.rollT > 0) {
@@ -177,7 +179,7 @@ export function createRace(track, roster, authority, hooks) {
     // speed
     k.offroad = Math.abs(k.lat) > tr.half + 0.3;
     let top = C.MAX * k.topMul, acc = C.ACC;
-    if (k.boostT > 0) { k.boostT -= dt; top *= 1.32; acc *= 3.2; }
+    if (k.boostT > 0) { k.boostT -= dt; top *= 1.3; acc *= 3.2; }
     else if (k.offroad) top *= 0.55;
     if (k.stormT > 0) top *= 0.6;
     if (k.slip) top *= 1.09;
@@ -205,19 +207,23 @@ export function createRace(track, roster, authority, hooks) {
       if (t > k.tier) { k.tier = t; sfx('drift_tier' + t, k); }
     }
 
-    // turning: blend from grip steering into the drift arc over ~0.4s (and back out smoothly)
+    // turning: blend from grip steering into the drift arc over ~0.4s (and back out smoothly).
+    // Drift turn rate is relative to grip: inner steer = 1.25x, neutral = 0.7x, counter-steer = 0.15x.
+    // Hard grip cornering scrubs speed; drifting keeps it (that is the reason to drift).
     k.driftAmt += ((k.drifting ? 1 : 0) - k.driftAmt) * Math.min(1, dt * (k.drifting ? 4.5 : 7));
-    const grip = k.steer * C.TURN * k.turnMul * (1 - 0.35 * clamp(sp01, 0, 1));
-    const arc = (k.driftDir * 0.6 + k.steer * 0.4) * C.TURN * 1.1;   // inner steer = tight, counter-steer = wide
+    const gripMax = C.TURN * k.turnMul * (1 - 0.3 * clamp(sp01, 0, 1));
+    const grip = k.steer * gripMax;
+    const arc = k.driftDir * gripMax * (0.7 + 0.55 * k.steer * k.driftDir);
     let turn = grip + (arc - grip) * k.driftAmt;
-    turn *= clamp(k.speed / 12, -1, 1);
+    turn *= clamp(k.speed / 10, -1, 1);
     k.h = wrapAngle(k.h - turn * dt);
+    if (k.speed > 0) k.speed -= Math.abs(k.steer) * clamp(sp01, 0, 1) * 7 * (1 - k.driftAmt) * dt;
 
     // move (+ outward slide while drifting)
     const sh = Math.sin(k.h), ch = Math.cos(k.h);
     k.x += sh * k.speed * dt; k.z += ch * k.speed * dt;
     if (k.driftAmt > 0.01) {
-      const sl = k.driftDir * k.speed * 0.1 * k.driftAmt * dt;
+      const sl = k.driftDir * k.speed * 0.03 * k.driftAmt * dt;
       k.x += ch * sl; k.z += -sh * sl;
     }
 
@@ -285,7 +291,7 @@ export function createRace(track, roster, authority, hooks) {
     // slipstream
     let drafting = false;
     for (const o of race.karts) {
-      if (o === k || o.gone || o.speed < 30) continue;
+      if (o === k || o.gone || o.speed < 22) continue;
       const dx = o.x - k.x, dz = o.z - k.z;
       const f = dx * sh + dz * ch, s = dx * ch - dz * sh;
       if (f > 3 && f < 17 && Math.abs(s) < 2.6) drafting = true;
@@ -321,7 +327,7 @@ export function createRace(track, roster, authority, hooks) {
   function stepBolts(dt) {
     for (let i = race.bolts.length - 1; i >= 0; i--) {
       const b = race.bolts[i];
-      b.life -= dt; b.s += 125 * dt;
+      b.life -= dt; b.s += 95 * dt;
       let tgt = null, best = 90;
       const bs = ((b.s % track.len) + track.len) % track.len;
       for (const k of race.karts) {

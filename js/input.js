@@ -51,9 +51,10 @@ export function createInput(ui, handlers) {
       if (settings.control === 'tilt' && tiltSeen) {
         let d = tiltRaw - tiltNeutral;
         if (d > 180) d -= 360; else if (d < -180) d += 360;
-        const dead = 2.2, lock = 26 / (settings.sensitivity || 1);
+        const dead = 2.5, lock = 28 / (settings.sensitivity || 1);
         let v = Math.abs(d) < dead ? 0 : (d - Math.sign(d) * dead) / (lock - dead);
         v = Math.max(-1, Math.min(1, v));
+        v = Math.sign(v) * Math.pow(Math.abs(v), 1.4);   // gentle near centre, full lock still reachable
         tiltSmooth += (v - tiltSmooth) * Math.min(1, dt * 14);
         steer = Math.max(-1, Math.min(1, steer + tiltSmooth));
       }

@@ -1,15 +1,38 @@
 // Track definitions + geometry sampling. World is flat: x/z plane, y up.
 // Heading h: forward = (sin h, cos h). Positive lateral offset = left of travel direction.
 
+// theme: scenery set used by the renderer ('city' | 'desert' | 'ice' | 'void').
+// ground/grid: ground fill + grid line colours. bloom: [strength, threshold].
 export const TRACKS = [
   {
-    name: 'NEON HARBOR', laps: 3, scale: 1.4, half: 10, wall: 15,
+    name: 'NEON HARBOR', sub: 'ネオン港湾 / 夜の都市', theme: 'city', laps: 3, scale: 1.45, half: 12, wall: 17,
     colA: '#22e6ff', colB: '#ff2bd6', fog: 0x140a2c, skyTop: 0x04030f, skyHorizon: 0x5a1a7a,
     pts: [[0, 0], [120, 0], [220, -30], [280, -110], [250, -200], [160, -230], [90, -180], [20, -200],
       [-60, -260], [-160, -240], [-200, -150], [-150, -70], [-190, 10], [-140, 60], [-60, 30]],
   },
   {
-    name: 'ORBITAL SPIRE', laps: 3, scale: 1.3, half: 9.5, wall: 14,
+    name: 'DUSK MESA', sub: '夕暮れの砂漠 / 高速', theme: 'desert', laps: 3, scale: 1.6, half: 13, wall: 18,
+    colA: '#ffb547', colB: '#ff4f6d', fog: 0x2a0f1c, skyTop: 0x150626, skyHorizon: 0xff6a3d,
+    ground: '#1c0c10', grid: '#ff8a3d',
+    pts: [[0, 0], [160, 0], [280, 30], [340, 120], [300, 210], [200, 230], [130, 180], [60, 220],
+      [-40, 260], [-150, 230], [-210, 140], [-190, 40], [-110, 0]],
+  },
+  {
+    name: 'CRYO VAULT', sub: '氷の峡谷 / テクニカル', theme: 'ice', laps: 3, scale: 1.35, half: 12, wall: 17,
+    colA: '#1fb8ff', colB: '#6a5cff', fog: 0x9fb8cf, skyTop: 0x2f6aa8, skyHorizon: 0xcfe0ee,
+    ground: '#9db5ca', grid: '#ffffff', bloom: [0.18, 0.9], fogNear: 160, fogFar: 1500,
+    pts: [[0, 0], [140, 0], [200, -50], [180, -130], [100, -140], [60, -200], [120, -270], [220, -280],
+      [260, -350], [180, -420], [40, -400], [-60, -330], [-40, -240], [-120, -180], [-160, -90], [-100, -20]],
+  },
+  {
+    name: 'CRIMSON VOID', sub: '深紅の虚空 / 浮遊回廊', theme: 'void', laps: 3, scale: 1.4, half: 12, wall: 17,
+    colA: '#ff2a3d', colB: '#9b5cff', fog: 0x07000a, skyTop: 0x000000, skyHorizon: 0x3a0012,
+    ground: '#040006', grid: '#ff2a3d',
+    pts: [[0, 0], [130, -20], [230, 40], [250, 150], [170, 225], [80, 215], [0, 165], [-80, 215],
+      [-170, 225], [-250, 150], [-230, 40], [-130, -20]],
+  },
+  {
+    name: 'ORBITAL SPIRE', sub: '軌道都市 / 複合', theme: 'city', laps: 3, scale: 1.35, half: 11.5, wall: 16.5,
     colA: '#7cff4f', colB: '#ffc531', fog: 0x061a22, skyTop: 0x01060c, skyHorizon: 0x0e5a6a,
     pts: [[0, 0], [150, 0], [230, 40], [240, 130], [170, 170], [90, 130], [30, 170], [40, 260],
       [-50, 300], [-140, 250], [-120, 150], [-200, 90], [-210, -10], [-120, -50]],

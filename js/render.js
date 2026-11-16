@@ -81,6 +81,7 @@ export async function createRenderer(canvas, quality) {
           composer.addPass(bloom);
           composer.addPass(new OutputPass());
         }
+        if (R.bloomCfg) { bloom.strength = R.bloomCfg[0]; bloom.threshold = R.bloomCfg[1]; }
         useBloom = true;
       } catch (e) { console.warn('bloom unavailable', e); }
     }
@@ -118,9 +119,11 @@ export async function createRenderer(canvas, quality) {
     if (world) { scene.remove(world); world.traverse(o => { if (o.geometry) o.geometry.dispose(); }); }
     world = new THREE.Group();
     scene.add(world);
-    scene.fog = new THREE.Fog(def.fog, 120, 1100);
+    scene.fog = new THREE.Fog(def.fog, def.fogNear || 120, def.fogFar || 1100);
     renderer.setClearColor(def.fog);
-    const A = def.colA, B = def.colB;
+    const A = def.colA, B = def.colB, theme = def.theme || 'city';
+    R.bloomCfg = def.bloom || [0.42, 0.72];
+    if (bloom) { bloom.strength = R.bloomCfg[0]; bloom.threshold = R.bloomCfg[1]; }
     const maxAniso = renderer.capabilities.getMaxAnisotropy();
 
     // sky dome
@@ -140,9 +143,22 @@ export async function createRenderer(canvas, quality) {
     }
     const sg = new THREE.BufferGeometry();
     sg.setAttribute('position', new THREE.BufferAttribute(sp, 3));
-    world.add(new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xcfe8ff, size: 2.2, sizeAttenuation: false, fog: false, transparent: true, opacity: 0.8 })));
-    // distant planet
-    const planet = new THREE.Mesh(new THREE.CircleGeometry(520, 48), new THREE.MeshBasicMaterial({
+    if (theme !== 'ice') world.add(new THREE.Points(sg, new THREE.PointsMaterial({ color: theme === 'void' ? 0xff9aa8 : 0xcfe8ff, size: 2.2, sizeAttenuation: false, fog: false, transparent: true, opacity: 0.8 })));
+    if (theme === 'void') {
+      // giant tilted halo rings instead of a planet
+      for (const [r, c, y] of [[760, A, 520], [600, B, 560]]) {
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(r, 10, 6, 120), new THREE.MeshBasicMaterial({ color: c, fog: false }));
+        ring.position.set(200, y, 2700); ring.rotation.set(1.15, 0.3, 0);
+        world.add(ring);
+      }
+    } else if (theme === 'ice') {
+      // pale daytime sun
+      const s = new THREE.Mesh(new THREE.CircleGeometry(260, 40), new THREE.MeshBasicMaterial({ map: glow, color: 0xffffff, fog: false, transparent: true, depthWrite: false }));
+      s.position.set(800, 1500, 2600); s.lookAt(0, 0, 0);
+      world.add(s);
+    }
+    // distant planet (city) / setting striped sun (desert)
+    const planet = new THREE.Mesh(new THREE.CircleGeometry(theme === 'desert' ? 900 : 520, 48), new THREE.MeshBasicMaterial({
       fog: false, transparent: true, depthWrite: false,
       map: canvasTex(256, 256, (g) => {
         const gr = g.createLinearGradient(0, 0, 0, 256);
@@ -152,14 +168,14 @@ export async function createRenderer(canvas, quality) {
         for (let y = 120; y < 256; y += 18) g.fillRect(0, y, 256, 3 + (y - 120) * 0.06);
       }),
     }));
-    planet.position.set(-900, 420, 2900);
+    if (theme === 'desert') planet.position.set(300, 250, 3000); else planet.position.set(-900, 420, 2900);
     planet.lookAt(0, 200, 0);
-    world.add(planet);
+    if (theme === 'city' || theme === 'desert') world.add(planet);
 
     // ground grid
     const gridT = canvasTex(128, 128, (g) => {
-      g.fillStyle = '#05060d'; g.fillRect(0, 0, 128, 128);
-      g.strokeStyle = B; g.globalAlpha = 0.55; g.lineWidth = 2; g.strokeRect(0, 0, 128, 128);
+      g.fillStyle = def.ground || '#05060d'; g.fillRect(0, 0, 128, 128);
+      g.strokeStyle = def.grid || B; g.globalAlpha = theme === 'ice' ? 0.7 : 0.55; g.lineWidth = 2; g.strokeRect(0, 0, 128, 128);
     }, true);
     gridT.repeat.set(260, 260); gridT.anisotropy = maxAniso;
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(7000, 7000), new THREE.MeshBasicMaterial({ map: gridT }));
@@ -251,18 +267,38 @@ export async function createRenderer(canvas, quality) {
       world.add(m);
     }
 
-    // city
-    const winT = canvasTex(64, 128, (g) => {
-      g.fillStyle = '#070912'; g.fillRect(0, 0, 64, 128);
-      for (let y = 4; y < 128; y += 8) for (let x = 4; x < 64; x += 8) {
-        const r = Math.random();
-        if (r < 0.45) { g.fillStyle = r < 0.15 ? '#ffffff' : r < 0.3 ? A : B; g.globalAlpha = 0.25 + Math.random() * 0.6; g.fillRect(x, y, 4, 3); }
-      }
-    }, true);
+    // scenery: city towers / desert mesas / ice crystals / floating void monoliths
     const NB = quality === 'high' ? 260 : 150;
-    const bg = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
-    const city = new THREE.InstancedMesh(bg, new THREE.MeshBasicMaterial({ map: winT }), NB);
-    const mat = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), po = new THREE.Vector3();
+    let bg, smat;
+    if (theme === 'desert') {
+      bg = new THREE.CylinderGeometry(0.42, 0.5, 1, 7).translate(0, 0.5, 0);
+      smat = new THREE.MeshLambertMaterial({ flatShading: true });
+    } else if (theme === 'ice') {
+      bg = new THREE.OctahedronGeometry(0.5, 0).translate(0, 0.18, 0);
+      smat = new THREE.MeshPhongMaterial({ flatShading: true, shininess: 90, specular: 0xffffff, transparent: true, opacity: 0.88 });
+    } else if (theme === 'void') {
+      bg = new THREE.BoxGeometry(1, 1, 1);
+      smat = new THREE.MeshBasicMaterial({
+        map: canvasTex(32, 128, (g) => {
+          g.fillStyle = '#050006'; g.fillRect(0, 0, 32, 128);
+          g.fillStyle = A; g.fillRect(0, 0, 32, 3); g.fillRect(0, 125, 32, 3); g.fillRect(0, 0, 2, 128); g.fillRect(30, 0, 2, 128);
+          g.globalAlpha = 0.5; g.fillRect(14, 20, 4, 88);
+        }),
+      });
+    } else {
+      bg = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
+      smat = new THREE.MeshBasicMaterial({
+        map: canvasTex(64, 128, (g) => {
+          g.fillStyle = '#070912'; g.fillRect(0, 0, 64, 128);
+          for (let y = 4; y < 128; y += 8) for (let x = 4; x < 64; x += 8) {
+            const r = Math.random();
+            if (r < 0.45) { g.fillStyle = r < 0.15 ? '#ffffff' : r < 0.3 ? A : B; g.globalAlpha = 0.25 + Math.random() * 0.6; g.fillRect(x, y, 4, 3); }
+          }
+        }, true),
+      });
+    }
+    const city = new THREE.InstancedMesh(bg, smat, NB);
+    const mat = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), po = new THREE.Vector3(), eu = new THREE.Euler();
     let minX = 1e9, maxX = -1e9, minZ = 1e9, maxZ = -1e9;
     for (let i = 0; i < track.n; i++) {
       minX = Math.min(minX, track.px[i]); maxX = Math.max(maxX, track.px[i]);
@@ -280,10 +316,24 @@ export async function createRenderer(canvas, quality) {
         if (dx * dx + dz * dz < lim) { ok = false; break; }
       }
       if (!ok) continue;
-      po.set(x, -0.6, z); sc.set(w, 18 + Math.random() * Math.random() * 190, d);
+      const rr = Math.random();
+      if (theme === 'desert') {
+        po.set(x, -0.6, z); sc.set(w * 1.6, 8 + rr * rr * 70, d * 1.6); q.setFromEuler(eu.set(0, rr * 6, 0));
+        tmpC.setHSL(0.02 + Math.random() * 0.06, 0.55, 0.22 + Math.random() * 0.2);
+      } else if (theme === 'ice') {
+        po.set(x, -0.6, z); sc.set(w * 0.7, 20 + rr * rr * 160, d * 0.7); q.setFromEuler(eu.set((Math.random() - 0.5) * 0.5, rr * 6, (Math.random() - 0.5) * 0.5));
+        tmpC.setHSL(0.53 + Math.random() * 0.1, 0.6, 0.62 + Math.random() * 0.25);
+      } else if (theme === 'void') {
+        const h = 30 + rr * 120;
+        po.set(x, 20 + Math.random() * 90 + h / 2, z); sc.set(w * 0.35, h, d * 0.35); q.setFromEuler(eu.set((Math.random() - 0.5) * 0.6, rr * 6, (Math.random() - 0.5) * 0.6));
+        tmpC.setHSL(0.95 + Math.random() * 0.1, 0.4, 0.5 + Math.random() * 0.4);
+      } else {
+        po.set(x, -0.6, z); sc.set(w, 18 + rr * Math.random() * 190, d); q.identity();
+        tmpC.setHSL(0.6 + Math.random() * 0.25, 0.5, 0.45 + Math.random() * 0.4);
+      }
       mat.compose(po, q, sc);
       city.setMatrixAt(placed, mat);
-      city.setColorAt(placed, tmpC.setHSL(0.6 + Math.random() * 0.25, 0.5, 0.45 + Math.random() * 0.4));
+      city.setColorAt(placed, tmpC);
       placed++;
     }
     city.count = placed;
@@ -440,7 +490,7 @@ export async function createRenderer(canvas, quality) {
     if (!k) return;
     const boosting = k.boostT > 0, sp01 = Math.max(0, k.speed) / C.MAX;
     camH += Math.atan2(Math.sin(k.h - camH), Math.cos(k.h - camH)) * Math.min(1, dt * (k.spinT > 0 ? 2 : 5.5));
-    const back = 8.2 + sp01 * 1.6 + (boosting ? 2.2 : 0), up = 3.5;
+    const back = 8.4 + sp01 * 1.2 + (boosting ? 1.4 : 0), up = 3.6;
     const tx = k.x - Math.sin(camH) * back, tz = k.z - Math.cos(camH) * back;
     const a = Math.min(1, dt * 9);
     camPos.x += (tx - camPos.x) * a; camPos.z += (tz - camPos.z) * a; camPos.y += (up - camPos.y) * Math.min(1, dt * 4);
@@ -452,7 +502,7 @@ export async function createRenderer(canvas, quality) {
     camera.position.set(camPos.x + sx, camPos.y + sy + (boosting ? Math.random() * 0.05 : 0), camPos.z);
     camera.lookAt(camLook);
     camera.rotateZ(-k.steer * 0.045 * sp01 - (k.driftAmt || 0) * k.driftDir * 0.05);
-    const fovT = 68 + sp01 * 10 + (boosting ? 16 : 0);
+    const fovT = 66 + sp01 * 8 + (boosting ? 10 : 0);
     fov += (fovT - fov) * Math.min(1, dt * (fovT > fov ? 6 : 2));
     if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = fov; camera.updateProjectionMatrix(); }
     if (R.sky) R.sky.position.copy(camera.position);
